@@ -19,8 +19,8 @@ const char* vertexShaderStr = R"(#version 300 es
     out float textureIndex;
 
     void main() {
-      gl_Position = vec4(position, 0.0, 1.0);
-      textureIndex = inTextureIndex;
+        gl_Position = vec4(position, 0.0, 1.0);
+        textureIndex = inTextureIndex;
     }
 )";
 
@@ -30,8 +30,11 @@ const char* fragmentShaderStr = R"(#version 300 es
     in float textureIndex;
     out vec4 FragColor;
 
+    uniform sampler2D ourTexture;
+
     void main() {
-      FragColor = vec4(1.0, textureIndex, 0.0, 1.0);
+        vec4 color = texture(ourTexture, vec2(0.0, 0.0));
+        FragColor = vec4(color.x, textureIndex, color.z, 1.0);
     }
 )";
 
@@ -64,6 +67,8 @@ void draw(void* userData) {
     const GLint textureIndex = glGetAttribLocation(glUserData.m_Program, "inTextureIndex");
     glVertexAttribPointer(textureIndex, 1, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)(2 * sizeof(float)));
     glEnableVertexAttribArray(textureIndex);
+
+    glBindTexture(GL_TEXTURE_2D, glUserData.m_Texture);
 
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
@@ -125,13 +130,13 @@ int main() {
     glGenTextures(1, &glUserData.m_Texture);
     glBindTexture(GL_TEXTURE_2D, glUserData.m_Texture);
 
-    std::array<uint8_t, 3> data = { 0, 255, 0 };
+    std::array<uint8_t, 3> data = { 0, 0, 255 };
 
     const GLsizei width = 1; 
     const GLsizei height = 1;
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
+    glGenerateMipmap(GL_TEXTURE_2D); // TODO try removing this
 
     printf("Hello world!\n");
 
