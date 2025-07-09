@@ -1,6 +1,7 @@
 #include <GLES2/gl2.h>
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
+#include <array>
 #include <cstdio>
 
 struct GLUserData
@@ -10,21 +11,43 @@ struct GLUserData
     GLuint m_Texture;
 };
 
-const char* vertex_shader_src =
-    "attribute vec2 position;\n"
-    "void main() {\n"
-    "  gl_Position = vec4(position, 0.0, 1.0);\n"
-    "}\n";
+const char* vertexShaderStr = R"(#version 300 es
+    precision mediump float;
 
-const char* fragment_shader_src =
-    "void main() {\n"
-    "  gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n"
-    "}\n";
+    in vec2 position;
+    in float inTextureIndex;
+    out float textureIndex;
+
+    void main() {
+      gl_Position = vec4(position, 0.0, 1.0);
+      textureIndex = inTextureIndex;
+    }
+)";
+
+const char* fragmentShaderStr = R"(#version 300 es
+    precision mediump float;
+
+    in float textureIndex;
+    out vec4 FragColor;
+
+    void main() {
+      FragColor = vec4(1.0, textureIndex, 0.0, 1.0);
+    }
+)";
 
 GLuint compile_shader(GLenum type, const char* src) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &src, NULL);
     glCompileShader(shader);
+    GLint compiled;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+    if (!compiled)
+    {
+        std::array<char, 4096> buffer;
+        GLsizei length;
+        glGetShaderInfoLog(shader, buffer.size(), &length, buffer.data());
+        printf("Error compiling shader %s\n", buffer.data());
+    }
     return shader;
 }
 
@@ -34,9 +57,13 @@ void draw(void* userData) {
 
     glUseProgram(glUserData.m_Program);
     glBindBuffer(GL_ARRAY_BUFFER, glUserData.m_VBO);
-    GLint pos = glGetAttribLocation(glUserData.m_Program, "position");
+    const GLint pos = glGetAttribLocation(glUserData.m_Program, "position");
+    glVertexAttribPointer(pos, 2, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(pos);
-    glVertexAttribPointer(pos, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+    const GLint textureIndex = glGetAttribLocation(glUserData.m_Program, "inTextureIndex");
+    glVertexAttribPointer(textureIndex, 1, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(textureIndex);
 
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
@@ -65,17 +92,27 @@ int main() {
 
     GLUserData glUserData;
 
-    GLuint vs = compile_shader(GL_VERTEX_SHADER, vertex_shader_src);
-    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, fragment_shader_src);
+    GLuint vs = compile_shader(GL_VERTEX_SHADER, vertexShaderStr);
+    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, fragmentShaderStr);
     glUserData.m_Program = glCreateProgram();
     glAttachShader(glUserData.m_Program, vs);
     glAttachShader(glUserData.m_Program, fs);
     glLinkProgram(glUserData.m_Program);
+    GLint linked;
+    glGetProgramiv(glUserData.m_Program, GL_LINK_STATUS, &linked);
+    if (!linked)
+    {
+        std::array<char, 4096> buffer;
+        GLsizei length;
+        glGetProgramInfoLog(glUserData.m_Program, buffer.size(), &length, buffer.data());
+        printf("Error linking program %s\n", buffer.data());
+    }
 
     float vertices[] = {
-        0.0f,  0.5f,
-       -0.5f, -0.5f,
-        0.5f, -0.5f
+        // positions    texture index
+        0.0f,  0.5f,    0.f,
+       -0.5f, -0.5f,    1.f,
+        0.5f, -0.5f,    0.f
     };
 
     glGenBuffers(1, &glUserData.m_VBO);
@@ -85,7 +122,16 @@ int main() {
     emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, NULL, EM_TRUE, keyCallback);
     emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, NULL, EM_TRUE, keyCallback);
     
-    //glGenTextures(1, &texture);
+    glGenTextures(1, &glUserData.m_Texture);
+    glBindTexture(GL_TEXTURE_2D, glUserData.m_Texture);
+
+    std::array<uint8_t, 3> data = { 0, 255, 0 };
+
+    const GLsizei width = 1; 
+    const GLsizei height = 1;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data());
+    glGenerateMipmap(GL_TEXTURE_2D);
 
     printf("Hello world!\n");
 
