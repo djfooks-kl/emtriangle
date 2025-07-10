@@ -67,9 +67,7 @@ void setTextureData(const double time)
     std::array<uint8_t, 6> data = { animation, 0, 255, static_cast<uint8_t>(255 - animation), 0, 0 };
 
     const GLsizei height = 1;
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, s_TextureWidth, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 void update(void* userData) {
@@ -141,7 +139,9 @@ int main() {
 
     glGenTextures(1, &glUserData.m_Texture);
     glBindTexture(GL_TEXTURE_2D, glUserData.m_Texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     setTextureData(0.0);
+    glGenerateMipmap(GL_TEXTURE_2D);
 
     const float fWidth = s_TextureWidth;
     float vertices[] = {
