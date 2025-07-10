@@ -15,8 +15,10 @@ const char* vertexShaderStr = R"(#version 300 es
     layout (location = 1) in float inTextureIndex;
     out float textureIndex;
 
+    uniform vec2 transform;
+
     void main() {
-        gl_Position = vec4(position, 0.0, 1.0);
+        gl_Position = vec4(position + transform, 0.0, 1.0);
         textureIndex = inTextureIndex;
     }
 )";
@@ -92,6 +94,10 @@ void update(void* userData) {
 
     glBindTexture(GL_TEXTURE_2D, glUserData.m_Texture);
     setTextureData(glUserData.m_Time);
+
+    const float animation = static_cast<float>(std::abs(static_cast<uint8_t>(glUserData.m_Time * 100.f) - 128)) / 200.f;
+    GLint transformUniform = glGetUniformLocation(glUserData.m_Program, "transform");
+    glUniform2f(transformUniform, 0, animation);
 
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
