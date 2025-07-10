@@ -1,9 +1,11 @@
-#include <GLES2/gl2.h>
+#include <array>
+#include <chrono>
+#include <cstdio>
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
-#include <array>
-#include <cstdio>
+#include <GLES2/gl2.h>
 
+constexpr int s_TextureWidth = 2;
 constexpr GLuint s_AttributePosition = 0;
 constexpr GLuint s_AttributeTextureIndex = 1;
 const char* vertexShaderStr = R"(#version 300 es
@@ -38,6 +40,9 @@ struct GLUserData
     GLuint m_Program;
     GLuint m_VBO;
     GLuint m_Texture;
+
+    std::chrono::steady_clock::time_point m_LastFrameTime;
+    double m_Time = 0.0;
 };
 
 GLuint compile_shader(GLenum type, const char* name, const char* src) {
@@ -56,8 +61,27 @@ GLuint compile_shader(GLenum type, const char* name, const char* src) {
     return shader;
 }
 
-void draw(void* userData) {
+void setTextureData(const double time)
+{
+    const uint8_t animation = static_cast<uint8_t>(std::abs(static_cast<uint8_t>(time * 100.f) - 128));
+    std::array<uint8_t, 6> data = { animation, 0, 255, static_cast<uint8_t>(255 - animation), 0, 0 };
+
+    const GLsizei height = 1;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, s_TextureWidth, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data());
+    glGenerateMipmap(GL_TEXTURE_2D);
+}
+
+void update(void* userData) {
     GLUserData& glUserData = *static_cast<GLUserData*>(userData);
+
+    const std::chrono::steady_clock::time_point currentTime = std::chrono::steady_clock::now();
+    const std::chrono::duration<float> deltaTimeDuration = std::chrono::duration_cast<std::chrono::duration<float>>(currentTime - glUserData.m_LastFrameTime);
+    const float deltaTime = deltaTimeDuration.count();
+    glUserData.m_LastFrameTime = currentTime;
+
+    glUserData.m_Time += deltaTime;
+
     glClear(GL_COLOR_BUFFER_BIT);
 
     glUseProgram(glUserData.m_Program);
@@ -69,6 +93,7 @@ void draw(void* userData) {
     glEnableVertexAttribArray(s_AttributeTextureIndex);
 
     glBindTexture(GL_TEXTURE_2D, glUserData.m_Texture);
+    setTextureData(glUserData.m_Time);
 
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
@@ -96,6 +121,7 @@ int main() {
     emscripten_webgl_make_context_current(ctx);
 
     GLUserData glUserData;
+    glUserData.m_LastFrameTime = std::chrono::steady_clock::now();
 
     GLuint vs = compile_shader(GL_VERTEX_SHADER, "vertex", vertexShaderStr);
     GLuint fs = compile_shader(GL_FRAGMENT_SHADER, "fragment", fragmentShaderStr);
@@ -115,16 +141,9 @@ int main() {
 
     glGenTextures(1, &glUserData.m_Texture);
     glBindTexture(GL_TEXTURE_2D, glUserData.m_Texture);
+    setTextureData(0.0);
 
-    std::array<uint8_t, 6> data = { 0, 0, 255, 255, 0, 0 };
-
-    const GLsizei width = 2;
-    const GLsizei height = 1;
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    const float fWidth = width;
+    const float fWidth = s_TextureWidth;
     float vertices[] = {
         // positions    texture index
         0.0f,  0.5f,    0.f / fWidth,
@@ -141,7 +160,7 @@ int main() {
 
     printf("Hello world!\n");
 
-    emscripten_set_main_loop_arg(draw, static_cast<void*>(&glUserData), 0, 1);
+    emscripten_set_main_loop_arg(update, static_cast<void*>(&glUserData), 0, 1);
 
     return 0;
 }
